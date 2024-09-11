@@ -1,0 +1,250 @@
+package org.redmark;
+
+import static com.googlecode.lanterna.input.KeyType.EOF;
+import static com.googlecode.lanterna.input.KeyType.Escape;
+
+import java.util.concurrent.TimeUnit;
+
+import org.redmark.ASCIIArtGenerator.ASCIIArtFont;
+import com.googlecode.lanterna.SGR;
+import com.googlecode.lanterna.TextColor;
+import com.googlecode.lanterna.graphics.TextGraphics;
+import com.googlecode.lanterna.input.KeyStroke;
+import com.googlecode.lanterna.screen.Screen;
+import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+import java.awt.Toolkit;
+import java.io.IOException;
+
+class TimerService {
+  ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
+  int terminalHeight, terminalWidth;
+  Screen screen;
+  TextGraphics textGraphics;
+  public boolean inTimer = false;
+  public boolean timerOver = false;
+
+  TimerService(int terminalHeight, int terminalWidth, Screen screen, TextGraphics textGraphics) {
+    this.textGraphics = textGraphics;
+    this.screen = screen;
+    this.terminalHeight = terminalHeight;
+    this.terminalWidth = terminalWidth;
+  }
+
+  public void printTime(Long delayMins, Long delaySecs) throws Exception {
+    while (!inTimer) {
+      try {
+        wait();
+      } catch (Exception e) {
+      }
+    }
+    String textOutput = artGenerator.printTextArt(delayMins + "m : " + delaySecs + "s",
+        getSize(),
+        ASCIIArtFont.ART_FONT_MONO, "#");
+    String[] textArray = textOutput.split(":");
+    for (int row = 5, i = 0; row < terminalHeight && i < textArray.length; row++, i++) {
+      textGraphics.putString(2, row, textArray[i]);
+      screen.refresh();
+    }
+  }
+
+  public void resetText() {
+    for (int row = 2; row < terminalHeight; row++) {
+      textGraphics.putString(1, row, " ".repeat(terminalWidth));
+    }
+  }
+
+  public Integer getSize() {
+    Integer size = terminalWidth * terminalHeight;
+    return (int) Math.round(0.4 * Math.sqrt(size));
+
+  }
+
+  public void printBoom() throws Exception {
+    String textOutput = artGenerator.printTextArt("Time Up",
+        getSize(), ASCIIArtFont.ART_FONT_SERIF,
+        "$");
+    String[] textArray = textOutput.split(":");
+    for (int row = 5, i = 0; row < terminalHeight && i < textArray.length; row++, i++) {
+      textGraphics.putString(5, row, textArray[i]);
+      screen.refresh();
+    }
+  }
+
+  public void timerEnd() {
+    while (timerOver) {
+      try {
+        resetText();
+        printBoom();
+      } catch (Exception exception) {
+      }
+      for (int i = 0; i < 3; i++) {
+        Toolkit.getDefaultToolkit().beep();
+        resetText();
+        try {
+          Thread.sleep(500);
+        } catch (Exception exception) {
+        }
+      }
+      try {
+        Thread.sleep(2000);
+      } catch (InterruptedException exception) {
+      }
+
+    }
+  }
+}
+
+class TimerThread implements Runnable {
+  TimerService timerService;
+  Long delay;
+  TextGraphics textGraphics;
+
+  TimerThread(TimerService timerService, Long delay) {
+    this.timerService = timerService;
+    this.delay = delay;
+  }
+
+  @Override
+  public void run() {
+    try {
+      calculateTime();
+    } catch (Exception e) {
+    }
+    timerService.timerOver = true;
+    try {
+      timerService.timerEnd();
+    } catch (Exception e) {
+    }
+    timerService.resetText();
+
+  }
+
+  public void calculateTime() {
+    delay = delay / 1000;
+    Long delayMins = delay / 60;
+    Long delaySecs = delay % 60;
+    while (delay != -1) {
+      delayMins = delay / 60;
+      delaySecs = delay % 60;
+      try {
+        timerService.printTime(delayMins, delaySecs);
+        TimeUnit.SECONDS.sleep(1);
+      } catch (Exception e) {
+      }
+      delay--;
+      timerService.resetText();
+    }
+  }
+}
+
+public class Main {
+
+  static int terminalWidth = 0;
+  static int terminalHeight = 0;
+  static boolean inTimer = false;
+  static ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
+
+  public static void main(String[] args) throws Exception {
+    Screen screen = new DefaultTerminalFactory().createScreen();
+    screen.startScreen();
+    String heading = "Jromodo Timer";
+    TextGraphics textGraphics = screen.newTextGraphics();
+    textGraphics.enableModifiers(SGR.REVERSE);
+    textGraphics.putString((screen.getTerminalSize().getColumns() - heading.length()) / 2, 1, heading);
+    terminalWidth = screen.getTerminalSize().getColumns();
+    terminalHeight = screen.getTerminalSize().getRows();
+    defaultText(textGraphics);
+    screen.refresh();
+    printHelp(screen, textGraphics, "Height : " + terminalHeight + " Width : " + terminalWidth);
+    TimerService timerService = new TimerService(terminalHeight, terminalWidth, screen, textGraphics);
+    TimerThread timerThread = new TimerThread(timerService, inferDelay(args[0]));
+    Thread timeThread = new Thread(timerThread);
+    timeThread.start();
+    // int index = 0;
+    // KeyStroke keyStroke = screen.readInput();
+    while (true) {
+      KeyStroke keyStroke = screen.readInput();
+      if (!keyStroke.getKeyType().equals(EOF))
+        switch (keyStroke.getKeyType()) {
+          case Escape: {
+            printHelp(screen, textGraphics, "Press ESC again to exit");
+            if (screen.readInput().getKeyType().equals(Escape)) {
+              screen.stopScreen();
+              System.exit(0);
+            } else
+              clearHelp(screen, textGraphics);
+            break;
+          }
+          case Enter: {
+            if (!inTimer) {
+              inTimer = true;
+              timerService.inTimer = true;
+              printHelp(screen, textGraphics, "Timer started!");
+            } else {
+              timerService.inTimer = false;
+              inTimer = false;
+              printHelp(screen, textGraphics, "Timer stopped, press enter again to restart or Tab to reset timer");
+              if (timerService.timerOver) {
+                timerService.timerOver = false;
+                inTimer = true;
+                timerService.inTimer = true;
+                timeThread.start();
+                printHelp(screen, textGraphics, "Timer Restarted!");
+              }
+            }
+            break;
+          }
+          case Tab: {
+            Long newDelay = inferDelay(args[0]);
+            if (timeThread.isAlive() && !timerService.timerOver) {
+              inTimer = false;
+              timerService.inTimer = false;
+              timerThread.delay = (newDelay / 1000) + 1L;
+              printHelp(screen, textGraphics, "Timer Reset, press Enter to start the timer again");
+            } else if (!timeThread.isAlive() || timerService.timerOver) {
+              printHelp(screen, textGraphics, "Timer Restarted, press Enter to start!");
+              timerThread = new TimerThread(timerService, newDelay);
+              timeThread = new Thread(timerThread);
+              timerService.timerOver = false;
+            }
+            break;
+          }
+        }
+    }
+
+  }
+
+  public static void defaultText(TextGraphics textGraphics) {
+    textGraphics.disableModifiers(SGR.REVERSE);
+    textGraphics.setForegroundColor(TextColor.ANSI.DEFAULT);
+    textGraphics.setBackgroundColor(TextColor.ANSI.DEFAULT);
+  }
+
+  public static Long inferDelay(String delayString) {
+    String mins = "0", secs = "0";
+    mins = delayString.split(":")[0];
+    secs = delayString.split(":")[1];
+    return (Long.parseLong(mins) * 60 + Long.parseLong(secs)) * 1000;
+  }
+
+  public static void printHelp(Screen screen, TextGraphics textGraphics, String message) {
+    clearHelp(screen, textGraphics);
+    textGraphics.putString(1, screen.getTerminalSize().getRows() - 1,
+        message);
+    try {
+      screen.refresh();
+    } catch (IOException ioe) {
+    }
+  }
+
+  public static void clearHelp(Screen screen, TextGraphics textGraphics) {
+
+    textGraphics.putString(1, screen.getTerminalSize().getRows() - 1,
+        " ".repeat(terminalWidth));
+    try {
+      screen.refresh();
+    } catch (IOException ioe) {
+    }
+  }
+
+}
