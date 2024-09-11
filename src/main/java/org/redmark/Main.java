@@ -42,7 +42,7 @@ class TimerService {
         ASCIIArtFont.ART_FONT_MONO, "#");
     String[] textArray = textOutput.split(":");
     for (int row = 5, i = 0; row < terminalHeight && i < textArray.length; row++, i++) {
-      textGraphics.putString(2, row, textArray[i]);
+      textGraphics.putString(0, row, textArray[i]);
       screen.refresh();
     }
   }
@@ -55,7 +55,7 @@ class TimerService {
 
   public Integer getSize() {
     Integer size = terminalWidth * terminalHeight;
-    return (int) Math.round(0.4 * Math.sqrt(size));
+    return (int) Math.round(0.4 * Math.sqrt(size)) - 1;
 
   }
 
@@ -65,7 +65,7 @@ class TimerService {
         "$");
     String[] textArray = textOutput.split(":");
     for (int row = 5, i = 0; row < terminalHeight && i < textArray.length; row++, i++) {
-      textGraphics.putString(5, row, textArray[i]);
+      textGraphics.putString(1, row, textArray[i]);
       screen.refresh();
     }
   }
@@ -98,10 +98,13 @@ class TimerThread implements Runnable {
   TimerService timerService;
   Long delay;
   TextGraphics textGraphics;
+  boolean stopWatch = false;
 
   TimerThread(TimerService timerService, Long delay) {
     this.timerService = timerService;
     this.delay = delay;
+    if (delay == 0L)
+      stopWatch = true;
   }
 
   @Override
@@ -131,7 +134,10 @@ class TimerThread implements Runnable {
         TimeUnit.SECONDS.sleep(1);
       } catch (Exception e) {
       }
-      delay--;
+      if (!stopWatch)
+        delay--;
+      else
+        delay++;
       timerService.resetText();
     }
   }
@@ -156,9 +162,11 @@ public class Main {
     terminalHeight = screen.getTerminalSize().getRows();
     defaultText(textGraphics);
     screen.refresh();
-    printHelp(screen, textGraphics, "Height : " + terminalHeight + " Width : " + terminalWidth);
+    // printHelp(screen, textGraphics, "Height : " + terminalHeight + " Width : " +
+    // terminalWidth);
+    final Long milliDelay = args.length > 0 ? inferDelay(args[0]) : 0L;
     TimerService timerService = new TimerService(terminalHeight, terminalWidth, screen, textGraphics);
-    TimerThread timerThread = new TimerThread(timerService, inferDelay(args[0]));
+    TimerThread timerThread = new TimerThread(timerService, milliDelay);
     Thread timeThread = new Thread(timerThread);
     timeThread.start();
     // int index = 0;
@@ -199,15 +207,14 @@ public class Main {
             break;
           }
           case Tab: {
-            Long newDelay = inferDelay(args[0]);
             if (timeThread.isAlive() && !timerService.timerOver) {
               inTimer = false;
               timerService.inTimer = false;
-              timerThread.delay = (newDelay / 1000) + 1L;
+              timerThread.delay = milliDelay > 0 ? (milliDelay / 1000) + 1L : -1L;
               printHelp(screen, textGraphics, "Timer Reset, press Enter to start the timer again");
             } else if (!timeThread.isAlive() || timerService.timerOver) {
               printHelp(screen, textGraphics, "Timer Restarted, press Enter to start!");
-              timerThread = new TimerThread(timerService, newDelay);
+              timerThread = new TimerThread(timerService, milliDelay);
               timeThread = new Thread(timerThread);
               timerService.timerOver = false;
               timerOver = true;
