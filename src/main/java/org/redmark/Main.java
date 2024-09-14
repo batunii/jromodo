@@ -162,15 +162,11 @@ public class Main {
     terminalHeight = screen.getTerminalSize().getRows();
     defaultText(textGraphics);
     screen.refresh();
-    // printHelp(screen, textGraphics, "Height : " + terminalHeight + " Width : " +
-    // terminalWidth);
     final Long milliDelay = args.length > 0 ? inferDelay(args[0]) : 0L;
     TimerService timerService = new TimerService(terminalHeight, terminalWidth, screen, textGraphics);
     TimerThread timerThread = new TimerThread(timerService, milliDelay);
     Thread timeThread = new Thread(timerThread);
     timeThread.start();
-    // int index = 0;
-    // KeyStroke keyStroke = screen.readInput();
     while (true) {
       KeyStroke keyStroke = screen.readInput();
       if (!keyStroke.getKeyType().equals(EOF))
