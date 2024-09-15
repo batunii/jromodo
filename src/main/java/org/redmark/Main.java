@@ -162,9 +162,10 @@ public class Main {
   static int terminalHeight = 0;
   static boolean inTimer = false;
   static boolean timerOver = false;
-  static boolean timerReset = false;
+  static boolean timerReset = true;
   static ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
   static Long totalTime = 0L;
+  static Long tabDecrement = 1L;
 
   public static void main(String[] args) throws Exception {
     Screen screen = new DefaultTerminalFactory().createScreen();
@@ -188,7 +189,7 @@ public class Main {
         switch (keyStroke.getKeyType()) {
           case Escape: {
             sessionFile.createNewFile();
-            saveSession(timerService.totalElapsedTime);
+            saveSession(((timerService.totalElapsedTime * 1000) - tabDecrement * 1000));
             printHelp(screen, textGraphics, "Press ESC again to exit");
             if (screen.readInput().getKeyType().equals(Escape)) {
               screen.stopScreen();
@@ -207,7 +208,8 @@ public class Main {
               inTimer = false;
               timerReset = false;
               printHelp(screen, textGraphics, "Timer stopped, press enter again to restart or Tab to reset timer");
-              printExtra(screen, textGraphics, inferTime((timerService.totalElapsedTime*1000)-1000));
+              printExtra(screen, textGraphics,
+                  inferTime((timerService.totalElapsedTime * 1000) - tabDecrement * 1000) + ":" + tabDecrement);
 
             }
             if (timerService.timerOver) {
@@ -229,14 +231,18 @@ public class Main {
               timerThread.delay = milliDelay > 0 ? (milliDelay / 1000) + 1L : -1L;
               printHelp(screen, textGraphics, "Timer Reset, press Enter to start the timer again");
               timerReset = true;
-              timerService.totalElapsedTime--;
+              tabDecrement += 2;
 
-            } else if (!timeThread.isAlive() || timerService.timerOver) {
+            } else if (timerService.timerOver) {
               printHelp(screen, textGraphics, "Timer Restarted, press Enter to start!");
               timerThread = new TimerThread(timerService, milliDelay);
               timeThread = new Thread(timerThread);
               timerService.timerOver = false;
               timerOver = true;
+              tabDecrement++;
+              // timerService.totalElapsedTime--;
+            } else {
+              printHelp(screen, textGraphics, "Please press Enter to stop timer to reset timer");
             }
             break;
           }
@@ -300,7 +306,7 @@ public class Main {
   }
 
   public static void saveSession(Long timeLong) {
-    String thisSession = new Date().toString() + " -> " + inferTime(timeLong*1000) + "\n";
+    String thisSession = new Date().toString() + " -> " + inferTime(timeLong) + "\n";
 
     try (
         final BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8,
