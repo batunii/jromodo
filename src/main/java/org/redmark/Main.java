@@ -3,17 +3,26 @@ package org.redmark;
 import static com.googlecode.lanterna.input.KeyType.EOF;
 import static com.googlecode.lanterna.input.KeyType.Escape;
 
+import java.awt.Toolkit;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 import org.redmark.ASCIIArtGenerator.ASCIIArtFont;
+
 import com.googlecode.lanterna.SGR;
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
-import java.awt.Toolkit;
-import java.io.IOException;
 
 class TimerService {
   ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
@@ -22,6 +31,7 @@ class TimerService {
   TextGraphics textGraphics;
   public boolean inTimer = false;
   public boolean timerOver = false;
+  public Long totalElapsedTime = 0L;
 
   TimerService(int terminalHeight, int terminalWidth, Screen screen, TextGraphics textGraphics) {
     this.textGraphics = textGraphics;
@@ -31,6 +41,7 @@ class TimerService {
   }
 
   public void printTime(Long delayMins, Long delaySecs) throws Exception {
+    totalElapsedTime++;
     while (!inTimer) {
       try {
         wait();
@@ -145,11 +156,15 @@ class TimerThread implements Runnable {
 
 public class Main {
 
+  static final Path path = Paths.get(System.getProperty("user.home") + File.separator + "Sessions.txt");
+  static final File sessionFile = new File(System.getProperty("user.home") + File.separator + "Sessions.txt");
   static int terminalWidth = 0;
   static int terminalHeight = 0;
   static boolean inTimer = false;
   static boolean timerOver = false;
+  static boolean timerReset = false;
   static ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
+  static Long totalTime = 0L;
 
   public static void main(String[] args) throws Exception {
     Screen screen = new DefaultTerminalFactory().createScreen();
@@ -172,6 +187,8 @@ public class Main {
       if (!keyStroke.getKeyType().equals(EOF))
         switch (keyStroke.getKeyType()) {
           case Escape: {
+            sessionFile.createNewFile();
+            saveSession(timerService.totalElapsedTime);
             printHelp(screen, textGraphics, "Press ESC again to exit");
             if (screen.readInput().getKeyType().equals(Escape)) {
               screen.stopScreen();
@@ -188,7 +205,10 @@ public class Main {
             } else if (inTimer && !timerOver) {
               timerService.inTimer = false;
               inTimer = false;
+              timerReset = false;
               printHelp(screen, textGraphics, "Timer stopped, press enter again to restart or Tab to reset timer");
+              printExtra(screen, textGraphics, inferTime((timerService.totalElapsedTime*1000)-1000));
+
             }
             if (timerService.timerOver) {
               printHelp(screen, textGraphics, "Press Tab to reset timer");
@@ -203,11 +223,14 @@ public class Main {
             break;
           }
           case Tab: {
-            if (timeThread.isAlive() && !timerService.timerOver) {
+            if (timeThread.isAlive() && !timerService.timerOver && !timerReset) {
               inTimer = false;
               timerService.inTimer = false;
               timerThread.delay = milliDelay > 0 ? (milliDelay / 1000) + 1L : -1L;
               printHelp(screen, textGraphics, "Timer Reset, press Enter to start the timer again");
+              timerReset = true;
+              timerService.totalElapsedTime--;
+
             } else if (!timeThread.isAlive() || timerService.timerOver) {
               printHelp(screen, textGraphics, "Timer Restarted, press Enter to start!");
               timerThread = new TimerThread(timerService, milliDelay);
@@ -252,6 +275,40 @@ public class Main {
     try {
       screen.refresh();
     } catch (IOException ioe) {
+    }
+  }
+
+  public static Long getTimeDiff(Long givenDelay, Long currDelay) {
+    Long elapsedTime = (givenDelay - (currDelay * 1000));
+    return elapsedTime;
+  }
+
+  public static String inferTime(Long milliTime) {
+    Long mins = (milliTime / 1000) / 60;
+    Long secs = (milliTime / 1000) % 60;
+    return mins + " mins " + secs + " secs in this session";
+  }
+
+  public static void printExtra(Screen screen, TextGraphics textGraphics, String message) {
+    clearHelp(screen, textGraphics);
+    textGraphics.putString(1, screen.getTerminalSize().getRows() - 2,
+        message);
+    try {
+      screen.refresh();
+    } catch (IOException ioe) {
+    }
+  }
+
+  public static void saveSession(Long timeLong) {
+    String thisSession = new Date().toString() + " -> " + inferTime(timeLong*1000) + "\n";
+
+    try (
+        final BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8,
+            StandardOpenOption.APPEND)) {
+      writer.write(thisSession);
+      writer.flush();
+    } catch (Exception e) {
+      // System.out.println(e.getStackTrace());
     }
   }
 
