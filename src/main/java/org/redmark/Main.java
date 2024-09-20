@@ -166,6 +166,7 @@ public class Main {
   static ASCIIArtGenerator artGenerator = new ASCIIArtGenerator();
   static Long totalTime = 0L;
   static Long tabDecrement = 1L;
+  static Date nowDate = new Date();
 
   public static void main(String[] args) throws Exception {
     Screen screen = new DefaultTerminalFactory().createScreen();
@@ -189,9 +190,9 @@ public class Main {
         switch (keyStroke.getKeyType()) {
           case Escape: {
             sessionFile.createNewFile();
-            saveSession(((timerService.totalElapsedTime * 1000) - tabDecrement * 1000));
             printHelp(screen, textGraphics, "Press ESC again to exit");
             if (screen.readInput().getKeyType().equals(Escape)) {
+              saveSession(((timerService.totalElapsedTime * 1000) - tabDecrement * 1000));
               screen.stopScreen();
               System.exit(0);
             } else
@@ -306,7 +307,7 @@ public class Main {
   }
 
   public static void saveSession(Long timeLong) {
-    String thisSession = new Date().toString() + " -> " + inferTime(timeLong) + "\n";
+    String thisSession = nowDate.toString() + " -> " + inferTime(timeLong) + "\n";
 
     try (
         final BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8,
